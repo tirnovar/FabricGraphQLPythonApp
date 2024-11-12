@@ -1,10 +1,19 @@
-import requests
-import json
+from requests import request
 import json2html
 import tkinter as tk
 
 def flatten(listOfLists):
     return [row for list in listOfLists for row in list]
+
+def configReader(fileName):
+    config = open(fileName,"r") 
+    configReader = config.read().split("\n")
+    endpoint = configReader[0]
+    tenantid = configReader[1]
+    clientid = configReader[2]
+    secret = configReader[3]
+    config.close()
+    return endpoint, tenantid, clientid, secret
 
 class GraphQLHandler:
     def __init__(self, url, tenant_id, client_id, client_secret):
@@ -24,6 +33,8 @@ class GraphQLHandler:
                 body = response.text
         elif ("octet-stream" in response.headers["Content-Type"]):
             body = response.content
+        elif ("text/plain" in response.headers["Content-Type"]):
+            body = response.json()
         else:
             body = response.text
 
@@ -34,7 +45,7 @@ class GraphQLHandler:
         }
 
     def __send_request(self, method, url, headers={}, body={}):
-        response = http_request(method, url, headers=headers, data=body)
+        response = request(method, url, headers=headers, data=body)
         return self.__handle_response(response)
     
     def __send_autorized_request(self, method, url, body = {}):
@@ -42,10 +53,10 @@ class GraphQLHandler:
 
         headers = {
             "Authorization": self.__access_token,
-            "Accept": "application/json; odata=nometadata"
+            "Content-Type": "application/json"
         }
 
-        response = self.__send_request(method, url, headers, body)
+        response = self.__send_request(method, url, headers = headers, body=body)
         return response
     
     def __get_access_token(self):
@@ -54,14 +65,22 @@ class GraphQLHandler:
         scope = 'https://api.fabric.microsoft.com/.default'
         body = {
                 "grant_type": "client_credentials",
-                "client_id": f"{self.__client_id}",
+                "client_id": self.__client_id,
                 "client_secret": self.__client_secret,
                 "scope": scope
             }
         response = self.__send_request("POST", url, headers, body)
         self.__access_token = "Bearer " + response["body"]["access_token"]
     
-    def get_values_from_table(self, table_name):
-        url = f"{self.__url}/{table_name}"
-        response = self.__send_autorized_request("GET", url)
-        return response["body"]["value"]
+    def send_ql_query(self, query):
+        response = self.__send_autorized_request("POST", self.__url, body = query)["body"]
+        return response["data"]["obligatory_Exams"]["items"]
+
+
+endpoint, tenantid, clientid, secret = configReader("config.txt")
+
+query = '{"query":"query{obligatory_Exams{items{ExamCode}}}"}'
+
+graph_ql_handler = GraphQLHandler(endpoint, tenantid, clientid, secret)
+df = graph_ql_handler.send_ql_query(query)
+print(df)
