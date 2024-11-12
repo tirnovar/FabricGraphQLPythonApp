@@ -1,19 +1,19 @@
 from requests import request
 import json2html
 import tkinter as tk
+import tkinter.ttk as ttk
 
 def flatten(listOfLists):
     return [row for list in listOfLists for row in list]
 
 def configReader(fileName):
-    config = open(fileName,"r") 
-    configReader = config.read().split("\n")
-    endpoint = configReader[0]
-    tenantid = configReader[1]
-    clientid = configReader[2]
-    secret = configReader[3]
-    config.close()
-    return endpoint, tenantid, clientid, secret
+    with open(fileName,"r") as config:
+        configReader = config.read().split("\n")
+        endpoint = configReader[0]
+        tenantid = configReader[1]
+        clientid = configReader[2]
+        secret = configReader[3]
+        return endpoint, tenantid, clientid, secret
 
 class GraphQLHandler:
     def __init__(self, url, tenant_id, client_id, client_secret):
@@ -44,8 +44,11 @@ class GraphQLHandler:
             'body': body
         }
 
-    def __send_request(self, method, url, headers={}, body={}):
-        response = request(method, url, headers=headers, data=body)
+    def __send_request(self, method, url, headers={}, body={}, json={}):
+        if body != {}:
+            response = request(method, url, headers=headers, data=body)
+        else:
+            response = request(method, url, headers=headers, json=json)
         return self.__handle_response(response)
     
     def __send_autorized_request(self, method, url, body = {}):
@@ -56,7 +59,7 @@ class GraphQLHandler:
             "Content-Type": "application/json"
         }
 
-        response = self.__send_request(method, url, headers = headers, body=body)
+        response = self.__send_request(method, url, headers = headers, json=body)
         return response
     
     def __get_access_token(self):
@@ -79,8 +82,33 @@ class GraphQLHandler:
 
 endpoint, tenantid, clientid, secret = configReader("config.txt")
 
-query = '{"query":"query{obligatory_Exams{items{ExamCode}}}"}'
+query = """
+query{
+    obligatory_Exams{
+        items{
+            ExamCode
+        }
+    }
+}"""
 
 graph_ql_handler = GraphQLHandler(endpoint, tenantid, clientid, secret)
-df = graph_ql_handler.send_ql_query(query)
-print(df)
+responseJson = graph_ql_handler.send_ql_query({"query":query})
+
+root = tk.Tk()
+root.title("GraphQL Data")
+
+
+# Table
+treeview = ttk.Treeview(root,show="headings",columns=("ExamCode"))
+treeview.heading("#1", text="ExamCode")
+treeview.grid(column=0, row=0,columnspan = 2)
+
+print(responseJson)
+
+for row in responseJson:
+    treeview.insert("", "end", values=(row["ExamCode"]))
+
+updateButton = tk.Button(root, text="Add", command=lambda: print("Add")).grid(column=0, row=1) 
+delete = tk.Button(root, text="Delete", command=lambda: print("Delete")).grid(column=1, row=1)
+
+root.mainloop()
