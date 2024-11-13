@@ -1,5 +1,5 @@
 from requests import request
-import json2html
+from graphql_query import Operation, Query, Field
 import tkinter as tk
 import tkinter.ttk as ttk
 
@@ -58,8 +58,9 @@ class GraphQLHandler:
             "Authorization": self.__access_token,
             "Content-Type": "application/json"
         }
-
+        print("Data requested...")
         response = self.__send_request(method, url, headers = headers, json=body)
+        print("Data received...")
         return response
     
     def __get_access_token(self):
@@ -73,42 +74,81 @@ class GraphQLHandler:
                 "scope": scope
             }
         response = self.__send_request("POST", url, headers, body)
+        print("Access token requested...")
         self.__access_token = "Bearer " + response["body"]["access_token"]
+        print("Access token received.")
     
-    def send_ql_query(self, query):
+    def send_ql_query(self, query, tableName):
         response = self.__send_autorized_request("POST", self.__url, body = query)["body"]
-        return response["data"]["obligatory_Exams"]["items"]
+        return response["data"][tableName]["items"]
+
+class UIBuilder:
+    def __init__(self, receivedData = [{"Data": "Loading..."}]):
+        self.__root = tk.Tk()
+        self.__data = receivedData
+
+    def __run(self):
+        print("App loading...")
+        self.__root.mainloop()
+        print("App closed.")
+
+    def __build_menu(self):
+        menu = tk.Menu(self.__root)
+        self.__root.config(menu=menu)
+        filemenu = tk.Menu(menu)
+        menu.add_cascade(label="File", menu=filemenu)
+        filemenu.add_command(label="New", command=lambda: print("New"))
+        filemenu.add_command(label="Open...", command=lambda: print("Open"))
+        filemenu.add_separator()
+        filemenu.add_command(label="Exit", command=self.__root.quit)
+
+        helpmenu = tk.Menu(menu)
+        menu.add_cascade(label="Help", menu=helpmenu)
+        helpmenu.add_command(label="About...", command=lambda: print("About"))
+
+
+    def __build_table(self, data):
+        columns = list(data[0].keys())
+        __treeview = ttk.Treeview(self.__root,show="headings",columns=columns)
+
+        id = 0
+        for column in columns:
+            id += 1
+            __treeview.heading(f"#{id}", text=column)
+            
+        __treeview.grid(column=0, row=0,columnspan = 2 if id < 2 else id)
+
+        for row in data:
+            __treeview.insert("", "end", values=list(row.values()))
+
+        return __treeview
+    
+    def __build_buttons(self, title, position_col, position_row):
+        return tk.Button(self.__root, text=title, command=lambda: print(title)).grid(column=position_col, row=position_row) 
+
+    def build_app(self, title):
+        graph_ql_handler = GraphQLHandler(endpoint, tenantid, clientid, secret)
+        self.__data = graph_ql_handler.send_ql_query({"query":query},tableName)
+        self.table_with_values = self.__build_table(self.__data)
+
+        print("Building app:")
+        self.__root.title(title)
+        self.table_with_values = self.__build_table(self.__data)
+        print(" Table created...")
+        self.update_button = self.__build_buttons("Update", 0, 1)
+        self.delete_button = self.__build_buttons("Delete", 1, 1)
+        print(" Buttons created...")
+        self.__run()
 
 
 endpoint, tenantid, clientid, secret = configReader("config.txt")
 
-query = """
-query{
-    obligatory_Exams{
-        items{
-            ExamCode
-        }
-    }
-}"""
+tableName = "certification_Mappings"
+fields = ["certificationUid", "examCode"]
 
-graph_ql_handler = GraphQLHandler(endpoint, tenantid, clientid, secret)
-responseJson = graph_ql_handler.send_ql_query({"query":query})
+querySetup = Query(name=tableName, fields=[Field(name="items", fields=fields)])
+query = Operation(type='query', queries=[querySetup]).render()
+print("Query prepared for execution.")
 
-root = tk.Tk()
-root.title("GraphQL Data")
-
-
-# Table
-treeview = ttk.Treeview(root,show="headings",columns=("ExamCode"))
-treeview.heading("#1", text="ExamCode")
-treeview.grid(column=0, row=0,columnspan = 2)
-
-print(responseJson)
-
-for row in responseJson:
-    treeview.insert("", "end", values=(row["ExamCode"]))
-
-updateButton = tk.Button(root, text="Add", command=lambda: print("Add")).grid(column=0, row=1) 
-delete = tk.Button(root, text="Delete", command=lambda: print("Delete")).grid(column=1, row=1)
-
-root.mainloop()
+ui_builder = UIBuilder()
+ui_builder.build_app("GraphQL Data")
